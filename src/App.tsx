@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FirebaseProvider, useAuth } from './components/FirebaseProvider';
+import { AuthProvider, useAuth } from './components/AuthProvider';
 import { Layout } from './components/Layout';
 import { Gallery } from './components/Gallery';
 import { DeckSharing } from './components/DeckSharing';
@@ -16,8 +16,8 @@ function AppContent() {
     const saved = localStorage.getItem('user_nickname');
     if (saved) {
       setNickname(saved);
-    } else if (user?.displayName) {
-      setNickname(user.displayName);
+    } else if (user?.nickName) {
+      setNickname(user.nickName);
     }
   }, [user]);
 
@@ -95,9 +95,9 @@ function AppContent() {
 
 export default function App() {
   return (
-    <FirebaseProvider>
+    <AuthProvider>
       <AppContent />
-    </FirebaseProvider>
+    </AuthProvider>
   );
 }
 

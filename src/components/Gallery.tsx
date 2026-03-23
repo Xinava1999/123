@@ -1,18 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, Timestamp, updateDoc, doc, increment } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../firebase';
+import app, { db } from '../tcb';
 import { Camera, Loader2, Heart, Plus, X, Image as ImageIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface GalleryImage {
-  id: string;
+  _id: string;
   url: string;
   caption: string;
   authorName: string;
   likes: number;
-  createdAt: Timestamp;
+  createdAt: any;
 }
 
 export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
@@ -24,16 +22,26 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'images'), orderBy('createdAt', 'desc'), limit(50));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const newImages = snapshot.docs.map(doc => ({
-        id: doc.id,
-        likes: 0,
-        ...doc.data()
-      })) as GalleryImage[];
-      setImages(newImages);
-    });
-    return unsubscribe;
+    const watcher = db.collection('images')
+      .orderBy('createdAt', 'desc')
+      .limit(50)
+      .watch({
+        onChange: (snapshot) => {
+          const newImages = snapshot.docs.map(doc => ({
+            _id: doc._id,
+            likes: 0,
+            ...doc
+          })) as unknown as GalleryImage[];
+          setImages(newImages);
+        },
+        onError: (err) => {
+          console.error('TCB Gallery Watch Error:', err);
+        }
+      });
+    
+    return () => {
+      watcher.close();
+    };
   }, []);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -47,45 +55,51 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
     if (!file) return;
 
     setUploading(true);
-    const storageRef = ref(storage, `gallery/${Date.now()}_${file.name}`);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    try {
+      const cloudPath = `gallery/${Date.now()}_${file.name}`;
+      const result: any = await app.uploadFile({
+        cloudPath,
+        filePath: file as any
+      });
 
-    uploadTask.on('state_changed', 
-      (snapshot) => {
-        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-        setUploadProgress(progress);
-      }, 
-      (error) => {
-        console.error('Upload failed:', error);
-        setUploading(false);
-      }, 
-      async () => {
-        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-        await addDoc(collection(db, 'images'), {
-          url: downloadURL,
-          caption,
-          authorName: nickname || '匿名炉友',
-          likes: 0,
-          createdAt: serverTimestamp(),
-        });
-        setUploading(false);
-        setUploadProgress(0);
-        setShowUploadModal(false);
-        setCaption('');
-        if (fileInputRef.current) fileInputRef.current.value = '';
-      }
-    );
+      const fileID = result.fileID;
+      const res = await app.getTempFileURL({ fileList: [fileID] });
+      const downloadURL = res.fileList[0].tempFileURL;
+
+      await db.collection('images').add({
+        url: downloadURL,
+        caption,
+        authorName: nickname || '匿名炉友',
+        likes: 0,
+        createdAt: db.serverDate(),
+      });
+
+      setUploading(false);
+      setUploadProgress(100);
+      setShowUploadModal(false);
+      setCaption('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (error) {
+      console.error('Upload failed:', error);
+      setUploading(false);
+    }
   };
 
   const handleLike = async (imageId: string) => {
     try {
-      const imageRef = doc(db, 'images', imageId);
-      await updateDoc(imageRef, {
-        likes: increment(1)
+      const _ = db.command;
+      await db.collection('images').doc(imageId).update({
+        likes: _.inc(1)
       });
     } catch (error) {
       console.error('Error liking image:', error);
     }
+  };
+
+  const formatDate = (date: any) => {
+    if (!date) return '...';
+    const d = new Date(date);
+    return format(d, 'MM/dd');
   };
 
   return (
@@ -96,7 +110,7 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
           <motion.article 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            key={img.id} 
+            key={img._id} 
             className="bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden group relative"
           >
             <div className="aspect-square bg-gray-100 overflow-hidden relative">
@@ -107,7 +121,7 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
                 referrerPolicy="no-referrer"
               />
               <button 
-                onClick={() => handleLike(img.id)}
+                onClick={() => handleLike(img._id)}
                 className="absolute bottom-2 right-2 bg-white border-2 border-black p-1.5 hover:bg-red-500 hover:text-white transition-all flex items-center gap-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none z-10"
               >
                 <Heart size={12} className={img.likes > 0 ? 'fill-current' : ''} />
@@ -120,7 +134,7 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
                   {img.authorName}
                 </span>
                 <span className="text-[8px] text-gray-400 font-mono">
-                  {img.createdAt?.toDate ? format(img.createdAt.toDate(), 'MM/dd') : '...'}
+                  {formatDate(img.createdAt)}
                 </span>
               </div>
               {img.caption && <p className="text-[10px] font-medium leading-tight line-clamp-2">{img.caption}</p>}

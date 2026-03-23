@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db } from '../tcb';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, X, Copy, Check, Search, MessageSquare } from 'lucide-react';
 
 interface Deck {
-  id: string;
+  _id: string;
   code: string;
   title: string;
   authorName: string;
@@ -20,21 +19,30 @@ export const DeckSharing: React.FC<{ nickname: string }> = ({ nickname }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    const q = query(collection(db, 'decks'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Deck));
-      setDecks(docs);
-    });
-    return unsubscribe;
+    const watcher = db.collection('decks')
+      .orderBy('createdAt', 'desc')
+      .watch({
+        onChange: (snapshot) => {
+          const docs = snapshot.docs.map(doc => ({ _id: doc._id, ...doc } as unknown as Deck));
+          setDecks(docs);
+        },
+        onError: (err) => {
+          console.error('TCB Watch Error:', err);
+        }
+      });
+    
+    return () => {
+      watcher.close();
+    };
   }, []);
 
   const handleShare = async () => {
     if (!newDeck.code || !newDeck.title) return;
     try {
-      await addDoc(collection(db, 'decks'), {
+      await db.collection('decks').add({
         ...newDeck,
         authorName: nickname || '匿名炉友',
-        createdAt: serverTimestamp(),
+        createdAt: db.serverDate(),
       });
       setShowModal(false);
       setNewDeck({ code: '', title: '' });
@@ -78,7 +86,7 @@ export const DeckSharing: React.FC<{ nickname: string }> = ({ nickname }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {filteredDecks.map((deck) => (
           <motion.div
-            key={deck.id}
+            key={deck._id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-white border-4 border-black p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col"
@@ -95,12 +103,12 @@ export const DeckSharing: React.FC<{ nickname: string }> = ({ nickname }) => {
                 {deck.code}
               </div>
               <button
-                onClick={() => copyToClipboard(deck.code, deck.id)}
+                onClick={() => copyToClipboard(deck.code, deck._id)}
                 className={`p-2 border-2 border-black transition-all ${
-                  copiedId === deck.id ? 'bg-green-400' : 'bg-yellow-400 hover:bg-black hover:text-white'
+                  copiedId === deck._id ? 'bg-green-400' : 'bg-yellow-400 hover:bg-black hover:text-white'
                 }`}
               >
-                {copiedId === deck.id ? <Check size={18} /> : <Copy size={18} />}
+                {copiedId === deck._id ? <Check size={18} /> : <Copy size={18} />}
               </button>
             </div>
           </motion.div>
