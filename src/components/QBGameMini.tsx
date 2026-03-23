@@ -5,12 +5,19 @@ import { Trophy, Play, RotateCcw, Heart } from 'lucide-react';
 export const QBGameMini: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<'idle' | 'playing' | 'gameOver'>('idle');
+  const [difficulty, setDifficulty] = useState<'EASY' | 'NORMAL' | 'HARD'>('NORMAL');
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
-  const [showHeart, setShowHeart] = useState(false);
+
+  // Difficulty Config
+  const difficultyConfig = {
+    EASY: { speed: 1.5, paddleWidth: 100 },
+    NORMAL: { speed: 2.5, paddleWidth: 80 },
+    HARD: { speed: 4.0, paddleWidth: 60 },
+  };
 
   // Game Constants
-  const PADDLE_WIDTH = 80;
+  const PADDLE_WIDTH = difficultyConfig[difficulty].paddleWidth;
   const PADDLE_HEIGHT = 10;
   const BALL_RADIUS = 8;
   const BRICK_ROWS = 4;
@@ -39,8 +46,8 @@ export const QBGameMini: React.FC = () => {
     let animationFrameId: number;
     let x = canvas.width / 2;
     let y = canvas.height - 30;
-    let dx = 1.5;
-    let dy = -1.5;
+    let dx = difficultyConfig[difficulty].speed;
+    let dy = -difficultyConfig[difficulty].speed;
     let paddleX = (canvas.width - PADDLE_WIDTH) / 2;
     let rightPressed = false;
     let leftPressed = false;
@@ -267,10 +274,25 @@ export const QBGameMini: React.FC = () => {
                 {gameState === 'idle' ? (
                   <div className="text-center space-y-6">
                     <h3 className="text-4xl font-black italic tracking-tighter">弹射蟑螂</h3>
+                    
+                    <div className="flex bg-white/20 border-2 border-white p-1 rounded-lg">
+                      {(['EASY', 'NORMAL', 'HARD'] as const).map(d => (
+                        <button
+                          key={d}
+                          onClick={() => setDifficulty(d)}
+                          className={`px-4 py-2 font-black text-xs transition-all rounded ${
+                            difficulty === d ? 'bg-yellow-400 text-black' : 'hover:bg-white/20'
+                          }`}
+                        >
+                          {d === 'EASY' ? '简单' : d === 'NORMAL' ? '普通' : '困难'}
+                        </button>
+                      ))}
+                    </div>
+
                     <p className="text-sm font-medium opacity-80">使用鼠标或触摸控制挡板</p>
                     <button
                       onClick={startGame}
-                      className="bg-yellow-400 text-black px-8 py-4 font-black text-xl shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center space-x-2"
+                      className="bg-yellow-400 text-black px-8 py-4 font-black text-xl shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center justify-center space-x-2 w-full"
                     >
                       <Play fill="currentColor" />
                       <span>开始游戏</span>

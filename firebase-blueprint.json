@@ -1,0 +1,39 @@
+{
+  "entities": {
+    "GalleryImage": {
+      "title": "Gallery Image",
+      "description": "An image shared in the gallery with caption and likes",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "description": "The URL of the image" },
+        "caption": { "type": "string", "description": "The caption for the image" },
+        "authorName": { "type": "string", "description": "The name of the author" },
+        "likes": { "type": "number", "description": "The number of likes" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "The creation timestamp" }
+      },
+      "required": ["url", "caption", "authorName", "likes", "createdAt"]
+    },
+    "Deck": {
+      "title": "Hearthstone Deck",
+      "description": "A shared Hearthstone deck code and title",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "description": "The deck code" },
+        "title": { "type": "string", "description": "The title of the deck" },
+        "authorName": { "type": "string", "description": "The name of the author" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "The creation timestamp" }
+      },
+      "required": ["code", "title", "authorName", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/images/{imageId}": {
+      "schema": "GalleryImage",
+      "description": "Collection of shared images"
+    },
+    "/decks/{deckId}": {
+      "schema": "Deck",
+      "description": "Collection of shared decks"
+    }
+  }
+}

@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidImage(data) {
+      return data.url is string && data.url.size() > 0 &&
+             data.caption is string && data.caption.size() <= 1000 &&
+             data.authorName is string && data.authorName.size() <= 50 &&
+             data.likes is number && data.likes >= 0 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidDeck(data) {
+      return data.code is string && data.code.size() > 0 &&
+             data.title is string && data.title.size() <= 100 &&
+             data.authorName is string && data.authorName.size() <= 50 &&
+             data.createdAt is timestamp;
+    }
+
+    // Images collection
+    match /images/{imageId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidImage(request.resource.data);
+      allow update: if isAuthenticated() && 
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']) &&
+                    request.resource.data.likes == resource.data.likes + 1;
+      allow delete: if false;
+    }
+
+    // Decks collection
+    match /decks/{deckId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidDeck(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    // Test writes collection
+    match /test_writes/{id} {
+      allow create: if true;
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

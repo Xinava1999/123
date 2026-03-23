@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { AuthProvider, useAuth } from './components/AuthProvider';
+import { FirebaseProvider, useAuth } from './components/FirebaseProvider';
 import { Layout } from './components/Layout';
 import { Gallery } from './components/Gallery';
 import { DeckSharing } from './components/DeckSharing';
 import { QBGameMini } from './components/QBGameMini';
 import { QBFeeding } from './components/QBFeeding';
 import { Image, LayoutGrid, Gamepad2, Utensils, User } from 'lucide-react';
+
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from './firebase';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<'decks' | 'gallery' | 'game' | 'feed'>('decks');
@@ -16,8 +19,8 @@ function AppContent() {
     const saved = localStorage.getItem('user_nickname');
     if (saved) {
       setNickname(saved);
-    } else if (user?.nickName) {
-      setNickname(user.nickName);
+    } else if (user?.displayName) {
+      setNickname(user.displayName);
     }
   }, [user]);
 
@@ -93,11 +96,15 @@ function AppContent() {
   );
 }
 
+import { ErrorBoundary } from './components/ErrorBoundary';
+
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ErrorBoundary>
+      <FirebaseProvider>
+        <AppContent />
+      </FirebaseProvider>
+    </ErrorBoundary>
   );
 }
 

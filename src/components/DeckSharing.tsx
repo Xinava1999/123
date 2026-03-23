@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../tcb';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, limit } from 'firebase/firestore';
+import { signInAnonymously } from 'firebase/auth';
+import { db, auth } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, X, Copy, Check, Search, MessageSquare } from 'lucide-react';
+import { Plus, X, Copy, Check, Search, MessageSquare, Loader2 } from 'lucide-react';
+import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 
 interface Deck {
-  _id: string;
+  id: string;
   code: string;
   title: string;
   authorName: string;
@@ -14,40 +17,55 @@ interface Deck {
 export const DeckSharing: React.FC<{ nickname: string }> = ({ nickname }) => {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [showModal, setShowModal] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
   const [newDeck, setNewDeck] = useState({ code: '', title: '' });
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    const watcher = db.collection('decks')
-      .orderBy('createdAt', 'desc')
-      .watch({
-        onChange: (snapshot) => {
-          const docs = snapshot.docs.map(doc => ({ _id: doc._id, ...doc } as unknown as Deck));
-          setDecks(docs);
-        },
-        onError: (err) => {
-          console.error('TCB Watch Error:', err);
-        }
-      });
-    
-    return () => {
-      watcher.close();
-    };
+    const q = query(collection(db, 'decks'), orderBy('createdAt', 'desc'), limit(50));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Deck));
+      setDecks(docs);
+    }, (error) => {
+      console.error('onSnapshot error (decks):', error);
+      handleFirestoreError(error, OperationType.LIST, 'decks');
+    });
+    return unsubscribe;
   }, []);
 
   const handleShare = async () => {
-    if (!newDeck.code || !newDeck.title) return;
+    if (!newDeck.code || !newDeck.title) {
+      alert('请填写卡组标题和代码！');
+      return;
+    }
+
+    setIsSharing(true);
+    // 确保已登录
+    if (!auth.currentUser) {
+      try {
+        await signInAnonymously(auth);
+      } catch (authError) {
+        console.error('Auth failed before sharing deck:', authError);
+        alert('登录失败，无法发布。请刷新页面重试。');
+        setIsSharing(false);
+        return;
+      }
+    }
+
     try {
-      await db.collection('decks').add({
+      await addDoc(collection(db, 'decks'), {
         ...newDeck,
         authorName: nickname || '匿名炉友',
-        createdAt: db.serverDate(),
+        createdAt: serverTimestamp(),
       });
       setShowModal(false);
       setNewDeck({ code: '', title: '' });
     } catch (error) {
-      console.error("Error sharing deck:", error);
+      console.error('Error adding deck:', error);
+      handleFirestoreError(error, OperationType.CREATE, 'decks');
+    } finally {
+      setIsSharing(false);
     }
   };
 
@@ -86,7 +104,7 @@ export const DeckSharing: React.FC<{ nickname: string }> = ({ nickname }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {filteredDecks.map((deck) => (
           <motion.div
-            key={deck._id}
+            key={deck.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-white border-4 border-black p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col"
@@ -103,12 +121,12 @@ export const DeckSharing: React.FC<{ nickname: string }> = ({ nickname }) => {
                 {deck.code}
               </div>
               <button
-                onClick={() => copyToClipboard(deck.code, deck._id)}
+                onClick={() => copyToClipboard(deck.code, deck.id)}
                 className={`p-2 border-2 border-black transition-all ${
-                  copiedId === deck._id ? 'bg-green-400' : 'bg-yellow-400 hover:bg-black hover:text-white'
+                  copiedId === deck.id ? 'bg-green-400' : 'bg-yellow-400 hover:bg-black hover:text-white'
                 }`}
               >
-                {copiedId === deck._id ? <Check size={18} /> : <Copy size={18} />}
+                {copiedId === deck.id ? <Check size={18} /> : <Copy size={18} />}
               </button>
             </div>
           </motion.div>
@@ -155,10 +173,11 @@ export const DeckSharing: React.FC<{ nickname: string }> = ({ nickname }) => {
 
                 <button
                   onClick={handleShare}
-                  className="w-full bg-black text-white p-4 font-bold tracking-widest hover:bg-yellow-400 hover:text-black transition-colors flex items-center justify-center space-x-2"
+                  disabled={isSharing}
+                  className="w-full bg-black text-white p-4 font-bold tracking-widest hover:bg-yellow-400 hover:text-black transition-colors flex items-center justify-center space-x-2 disabled:opacity-50"
                 >
-                  <MessageSquare size={20} />
-                  <span>确认发布</span>
+                  {isSharing ? <Loader2 className="animate-spin" /> : <MessageSquare size={20} />}
+                  <span>{isSharing ? '正在发布...' : '确认发布'}</span>
                 </button>
               </div>
             </motion.div>
