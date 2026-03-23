@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { auth } from '../firebase';
+import { onAuthStateChanged, signInAnonymously, signOut, User, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 interface AuthContextType {
-  user: { uid: string; displayName: string | null } | null;
+  user: User | null;
   loading: boolean;
   login: () => Promise<void>;
   googleLogin: () => Promise<void>;
@@ -11,34 +13,54 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<{ uid: string; displayName: string | null } | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 模拟匿名登录，使用 localStorage 保持用户 ID
-    let mockUid = localStorage.getItem('mock_uid');
-    if (!mockUid) {
-      mockUid = 'user_' + Math.random().toString(36).substring(2, 15);
-      localStorage.setItem('mock_uid', mockUid);
-    }
-    
-    setUser({ uid: mockUid, displayName: '匿名炉友' });
-    setLoading(false);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+      } else {
+        // 默认尝试匿名登录
+        try {
+          const result = await signInAnonymously(auth);
+          setUser(result.user);
+        } catch (error) {
+          console.error("Firebase Anonymous Auth Error:", error);
+        }
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const login = async () => {
-    // 模拟登录
-    console.log("Mock Login");
+    try {
+      const result = await signInAnonymously(auth);
+      setUser(result.user);
+    } catch (error) {
+      console.error("Firebase Login Error:", error);
+    }
   };
 
   const googleLogin = async () => {
-    // 模拟 Google 登录 (在中国大陆不可用)
-    console.log("Mock Google Login - Not available in China");
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      setUser(result.user);
+    } catch (error) {
+      console.error("Firebase Google Login Error:", error);
+    }
   };
 
   const logout = async () => {
-    // 模拟退出
-    setUser(null);
+    try {
+      await signOut(auth);
+      setUser(null);
+    } catch (error) {
+      console.error("Firebase Logout Error:", error);
+    }
   };
 
   return (

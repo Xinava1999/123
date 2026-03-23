@@ -1,6 +1,10 @@
-// Client-side Firebase is disabled to ensure accessibility in mainland China.
-// All database operations are proxied through the backend API.
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
+import firebaseConfig from '../firebase-applet-config.json';
 
-export const db = {} as any;
-export const auth = {} as any;
-export const storage = {} as any;
+const app = initializeApp(firebaseConfig);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const auth = getAuth(app);
+export const storage = getStorage(app);

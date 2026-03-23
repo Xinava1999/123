@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, limit, deleteDoc, doc } from 'firebase/firestore';
+import { signInAnonymously } from 'firebase/auth';
+import { db, auth } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, X, Copy, Check, Search, MessageSquare, Loader2, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, X, Copy, Check, Search, MessageSquare, Loader2, Trash2 } from 'lucide-react';
+import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { useToast } from './Toast';
-import { CommentSection } from './CommentSection';
 
 interface Deck {
   id: string;
@@ -19,7 +22,6 @@ export const DeckSharing: React.FC<{ nickname: string }> = ({ nickname }) => {
   const [newDeck, setNewDeck] = useState({ code: '', title: '' });
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [expandedDeckId, setExpandedDeckId] = useState<string | null>(null);
   const { showToast, ToastComponent } = useToast();
 
   useEffect(() => {
@@ -190,28 +192,6 @@ export const DeckSharing: React.FC<{ nickname: string }> = ({ nickname }) => {
                 {copiedId === deck.id ? <Check size={18} /> : <Copy size={18} />}
               </button>
             </div>
-
-            <button
-              onClick={() => setExpandedDeckId(expandedDeckId === deck.id ? null : deck.id)}
-              className="mt-4 flex items-center justify-center space-x-2 text-[10px] font-black uppercase tracking-widest hover:text-yellow-600 transition-colors"
-            >
-              <MessageSquare size={14} />
-              <span>{expandedDeckId === deck.id ? '收起评论' : '查看评论'}</span>
-              {expandedDeckId === deck.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            </button>
-
-            <AnimatePresence>
-              {expandedDeckId === deck.id && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="overflow-hidden"
-                >
-                  <CommentSection type="decks" id={deck.id} nickname={nickname} />
-                </motion.div>
-              )}
-            </AnimatePresence>
           </motion.div>
         ))}
       </div>

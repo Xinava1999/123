@@ -7,6 +7,9 @@ import { QBGameMini } from './components/QBGameMini';
 import { QBFeeding } from './components/QBFeeding';
 import { Image, LayoutGrid, Gamepad2, Utensils, User } from 'lucide-react';
 
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from './firebase';
+
 import { HearthstoneQuiz } from './components/HearthstoneQuiz';
 
 function AppContent() {
