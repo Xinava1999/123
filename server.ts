@@ -34,10 +34,13 @@ if (fs.existsSync(configPath)) {
 }
 
 // Standard initialization for Cloud Run environment
+let firebaseApp: any = null;
 try {
   if (getApps().length === 0 && firebaseConfig) {
-    initializeApp(firebaseConfig);
+    firebaseApp = initializeApp(firebaseConfig);
     console.log("Firebase Client SDK initialized with projectId:", firebaseConfig.projectId);
+  } else if (getApps().length > 0) {
+    firebaseApp = getApps()[0];
   }
 } catch (e: any) {
   console.error("Firebase initialization error:", e);
@@ -50,8 +53,8 @@ async function startServer() {
   // Initialize DB
   let db: any;
   try {
-    if (firebaseConfig?.firestoreDatabaseId) {
-      db = getFirestore(undefined, firebaseConfig.firestoreDatabaseId);
+    if (firebaseApp && firebaseConfig?.firestoreDatabaseId) {
+      db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
       console.log("Firestore initialized with databaseId:", firebaseConfig.firestoreDatabaseId);
     } else {
       db = getFirestore();

@@ -1,10 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, limit, deleteDoc, doc } from 'firebase/firestore';
-import { signInAnonymously } from 'firebase/auth';
-import { db, auth } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, X, Copy, Check, Search, MessageSquare, Loader2, Trash2 } from 'lucide-react';
-import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { useToast } from './Toast';
 
 interface Deck {

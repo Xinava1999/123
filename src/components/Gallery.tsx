@@ -1,12 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, Timestamp, updateDoc, doc, increment, deleteDoc } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { signInAnonymously } from 'firebase/auth';
-import { db, storage, auth } from '../firebase';
 import { Camera, Loader2, Heart, Plus, X, ImageIcon, AlertCircle, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
-import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { useToast } from './Toast';
 
 interface GalleryImage {
