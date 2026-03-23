@@ -90,9 +90,14 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
             let height = img.height;
 
             const MAX_WIDTH = 800;
+            const MAX_HEIGHT = 800;
             if (width > MAX_WIDTH) {
               height = (MAX_WIDTH / width) * height;
               width = MAX_WIDTH;
+            }
+            if (height > MAX_HEIGHT) {
+              width = (MAX_HEIGHT / height) * width;
+              height = MAX_HEIGHT;
             }
 
             canvas.width = width;
@@ -100,7 +105,7 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
             const ctx = canvas.getContext('2d');
             ctx?.drawImage(img, 0, 0, width, height);
             
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.5); // Lower quality to save space
             resolve(dataUrl);
           };
           img.onerror = reject;
@@ -113,8 +118,10 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
       setUploadProgress(50);
       console.log('Image compressed, base64 length:', base64.length);
 
-      if (base64.length > 1500000) {
-        showToast('图片还是太大了（超过 1.5MB），请尝试上传更小的图片。', 'error');
+      // Firestore document limit is 1MB. Base64 is ~33% larger.
+      // 600KB * 1.33 = ~800KB, which is safe.
+      if (base64.length > 800000) {
+        showToast('图片还是太大了（超过 600KB），请尝试上传更小的图片或更低分辨率的图片。', 'error');
         setUploading(false);
         return;
       }
