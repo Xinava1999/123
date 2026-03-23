@@ -7,30 +7,38 @@ import { QBGameMini } from './components/QBGameMini';
 import { QBFeeding } from './components/QBFeeding';
 import { Image, LayoutGrid, Gamepad2, Utensils, User } from 'lucide-react';
 
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from './firebase';
-
 import { HearthstoneQuiz } from './components/HearthstoneQuiz';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<'decks' | 'gallery' | 'game' | 'feed'>('decks');
   const [activeGame, setActiveGame] = useState<'breakout' | 'quiz'>('breakout');
   const [nickname, setNickname] = useState('');
-  const { user, googleLogin, logout } = useAuth();
+  const [adminToken, setAdminToken] = useState(localStorage.getItem('admin_token') || '');
 
   useEffect(() => {
     const saved = localStorage.getItem('user_nickname');
-    if (saved) {
-      setNickname(saved);
-    } else if (user?.displayName) {
-      setNickname(user.displayName);
-    }
-  }, [user]);
+    if (saved) setNickname(saved);
+  }, []);
 
   const handleNicknameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newName = e.target.value;
     setNickname(newName);
     localStorage.setItem('user_nickname', newName);
+  };
+
+  const handleAdminLogin = () => {
+    const pass = window.prompt('请输入管理员密码:');
+    if (pass) {
+      localStorage.setItem('admin_token', pass);
+      setAdminToken(pass);
+      window.location.reload(); // 刷新以更新所有组件的权限状态
+    }
+  };
+
+  const handleAdminLogout = () => {
+    localStorage.removeItem('admin_token');
+    setAdminToken('');
+    window.location.reload();
   };
 
   const tabs = [
@@ -115,11 +123,11 @@ function AppContent() {
             className="flex-1 w-full bg-gray-100 border-2 border-black px-4 py-2 font-bold focus:bg-yellow-400 focus:outline-none transition-colors"
           />
           <div className="flex items-center space-x-2">
-            {user && !user.isAnonymous ? (
+            {adminToken ? (
               <div className="flex items-center space-x-2">
-                <span className="text-xs font-bold opacity-50 truncate max-w-[100px]">{user.email}</span>
+                <span className="text-xs font-bold opacity-50">管理员已登录</span>
                 <button
-                  onClick={() => logout()}
+                  onClick={handleAdminLogout}
                   className="bg-red-500 text-white px-4 py-2 font-black text-xs border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
                 >
                   退出
@@ -127,7 +135,7 @@ function AppContent() {
               </div>
             ) : (
               <button
-                onClick={() => googleLogin()}
+                onClick={handleAdminLogin}
                 className="bg-white text-black px-4 py-2 font-black text-xs border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all flex items-center space-x-2"
               >
                 <User size={14} />

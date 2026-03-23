@@ -24,6 +24,17 @@
         "createdAt": { "type": "string", "format": "date-time", "description": "The creation timestamp" }
       },
       "required": ["code", "title", "authorName", "createdAt"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A comment on a deck or image",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "description": "The comment text" },
+        "authorName": { "type": "string", "description": "The name of the author" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "The creation timestamp" }
+      },
+      "required": ["text", "authorName", "createdAt"]
     }
   },
   "firestore": {
@@ -31,9 +42,21 @@
       "schema": "GalleryImage",
       "description": "Collection of shared images"
     },
+    "/images/{imageId}/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Comments on a gallery image"
+    },
     "/decks/{deckId}": {
       "schema": "Deck",
       "description": "Collection of shared decks"
+    },
+    "/decks/{deckId}/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Comments on a shared deck"
+    },
+    "/likes_tracking/{likeId}": {
+      "schema": { "type": "object", "properties": { "userId": { "type": "string" }, "imageId": { "type": "string" } } },
+      "description": "Tracking of user likes to prevent duplicates"
     }
   }
 }
