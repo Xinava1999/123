@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: images
+    // Fields: url (string), caption (string), authorName (string), likes (number), createdAt (timestamp)
+    // Collection: decks
+    // Fields: code (string), title (string), description (string), authorName (string), createdAt (timestamp)
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidImage(data) {
+      return data.url is string && data.url.size() < 2000 &&
+             (data.createdAt == request.time || data.createdAt is timestamp) &&
+             (!('caption' in data) || (data.caption is string && data.caption.size() < 200)) &&
+             (!('likes' in data) || (data.likes is number && data.likes >= 0)) &&
+             (!('authorName' in data) || (data.authorName is string && data.authorName.size() < 100));
+    }
+
+    function isValidDeck(data) {
+      return data.code is string && data.code.size() < 5000 &&
+             data.title is string && data.title.size() < 200 &&
+             (data.createdAt == request.time || data.createdAt is timestamp) &&
+             (!('description' in data) || (data.description is string && data.description.size() < 2000)) &&
+             (!('authorName' in data) || (data.authorName is string && data.authorName.size() < 100));
+    }
+
+    match /images/{imageId} {
+      allow read: if true;
+      allow create: if isValidImage(request.resource.data);
+      allow update: if isAuthenticated() && 
+                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']) &&
+                     request.resource.data.likes == resource.data.likes + 1;
+      allow delete: if false;
+    }
+
+    match /decks/{deckId} {
+      allow read: if true;
+      allow create: if isValidDeck(request.resource.data);
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /scores/{scoreId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+    }
+    
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+  }
+}

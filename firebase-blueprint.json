@@ -1,0 +1,56 @@
+{
+  "entities": {
+    "Image": {
+      "title": "Gallery Image",
+      "description": "An image shared in the community gallery.",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "description": "The URL of the image." },
+        "caption": { "type": "string", "description": "A short description or caption." },
+        "authorName": { "type": "string", "description": "The display name of the author." },
+        "likes": { "type": "integer", "description": "Number of likes." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the image was uploaded." }
+      },
+      "required": ["url", "createdAt"]
+    },
+    "Score": {
+      "title": "Game Score",
+      "description": "A high score achieved in the mini-game.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the player." },
+        "userName": { "type": "string", "description": "The name of the player." },
+        "score": { "type": "integer", "description": "The score achieved." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the score was recorded." }
+      },
+      "required": ["userId", "score", "createdAt"]
+    },
+    "Deck": {
+      "title": "Hearthstone Deck",
+      "description": "A Hearthstone deck shared by a user.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "description": "The Hearthstone deck code." },
+        "title": { "type": "string", "description": "A title for the deck." },
+        "description": { "type": "string", "description": "A short description or guide." },
+        "authorName": { "type": "string", "description": "The display name of the author." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the deck was shared." }
+      },
+      "required": ["code", "title", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/images/{imageId}": {
+      "schema": "Image",
+      "description": "Community shared images."
+    },
+    "/scores/{scoreId}": {
+      "schema": "Score",
+      "description": "Global high scores."
+    },
+    "/decks/{deckId}": {
+      "schema": "Deck",
+      "description": "Community shared Hearthstone decks."
+    }
+  }
+}
