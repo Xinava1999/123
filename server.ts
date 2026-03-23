@@ -9,6 +9,7 @@ import {
   addDoc, 
   getDocs, 
   doc, 
+  getDoc,
   deleteDoc, 
   updateDoc, 
   increment, 
@@ -255,15 +256,88 @@ async function startServer() {
   });
 
   app.post("/api/images/:id/like", async (req, res) => {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: "userId is required" });
+
     try {
+      const likeId = `${req.params.id}_${userId}`;
+      const likeRef = doc(db, "likes_tracking", likeId);
+      const likeDocSnap = await getDoc(likeRef);
+
+      if (likeDocSnap.exists()) {
+        return res.status(400).json({ error: "Already liked" });
+      }
+
       const docRef = doc(db, "images", req.params.id);
       await updateDoc(docRef, {
         likes: increment(1)
       });
+
+      // Track the like
+      await setDoc(likeRef, {
+        userId,
+        imageId: req.params.id,
+        createdAt: serverTimestamp()
+      });
+
       res.json({ success: true });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error liking image:", error);
-      res.status(500).json({ error: "Failed to like image" });
+      res.status(500).json({ error: "Failed to like image", details: error.message });
+    }
+  });
+
+  // --- Comment Endpoints ---
+  app.get("/api/:type/:id/comments", async (req, res) => {
+    const { type, id } = req.params;
+    if (!["decks", "images"].includes(type)) return res.status(400).json({ error: "Invalid type" });
+
+    try {
+      const q = query(collection(db, type, id, "comments"), limit(100));
+      const snapshot = await getDocs(q);
+      const comments = snapshot.docs.map(doc => {
+        const data = doc.data();
+        let createdAt = new Date();
+        if (data.createdAt) {
+          if (typeof data.createdAt.toDate === 'function') {
+            createdAt = data.createdAt.toDate();
+          } else if (data.createdAt._seconds) {
+            createdAt = new Date(data.createdAt._seconds * 1000);
+          } else {
+            createdAt = new Date(data.createdAt);
+          }
+        }
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: createdAt.toISOString()
+        };
+      });
+
+      comments.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()); // Oldest first for comments
+      res.json(comments);
+    } catch (error: any) {
+      console.error("Error fetching comments:", error);
+      res.status(500).json({ error: "Failed to fetch comments", details: error.message });
+    }
+  });
+
+  app.post("/api/:type/:id/comments", async (req, res) => {
+    const { type, id } = req.params;
+    const { text, authorName } = req.body;
+    if (!["decks", "images"].includes(type)) return res.status(400).json({ error: "Invalid type" });
+    if (!text) return res.status(400).json({ error: "Text is required" });
+
+    try {
+      const docRef = await addDoc(collection(db, type, id, "comments"), {
+        text,
+        authorName: authorName || "匿名炉友",
+        createdAt: serverTimestamp(),
+      });
+      res.json({ id: docRef.id });
+    } catch (error: any) {
+      console.error("Error adding comment:", error);
+      res.status(500).json({ error: "Failed to add comment", details: error.message });
     }
   });
 

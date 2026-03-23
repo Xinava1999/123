@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Loader2, Heart, Plus, X, ImageIcon, AlertCircle, Trash2 } from 'lucide-react';
+import { Camera, Loader2, Heart, Plus, X, ImageIcon, AlertCircle, Trash2, ChevronDown, ChevronUp, MessageSquare } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import { useToast } from './Toast';
+import { CommentSection } from './CommentSection';
 
 interface GalleryImage {
   id: string;
@@ -19,8 +20,12 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [caption, setCaption] = useState('');
+  const [expandedImageId, setExpandedImageId] = useState<string | null>(null);
+  const [likedImages, setLikedImages] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { showToast, ToastComponent } = useToast();
+
+  const mockUid = localStorage.getItem('mock_uid') || 'anonymous';
 
   useEffect(() => {
     const fetchImages = async () => {
@@ -85,9 +90,14 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
             let height = img.height;
 
             const MAX_WIDTH = 800;
+            const MAX_HEIGHT = 800;
             if (width > MAX_WIDTH) {
               height = (MAX_WIDTH / width) * height;
               width = MAX_WIDTH;
+            }
+            if (height > MAX_HEIGHT) {
+              width = (MAX_HEIGHT / height) * width;
+              height = MAX_HEIGHT;
             }
 
             canvas.width = width;
@@ -95,7 +105,7 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
             const ctx = canvas.getContext('2d');
             ctx?.drawImage(img, 0, 0, width, height);
             
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.5); // Lower quality to save space
             resolve(dataUrl);
           };
           img.onerror = reject;
@@ -108,8 +118,10 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
       setUploadProgress(50);
       console.log('Image compressed, base64 length:', base64.length);
 
-      if (base64.length > 1500000) {
-        showToast('图片还是太大了（超过 1.5MB），请尝试上传更小的图片。', 'error');
+      // Firestore document limit is 1MB. Base64 is ~33% larger.
+      // 600KB * 1.33 = ~800KB, which is safe.
+      if (base64.length > 800000) {
+        showToast('图片还是太大了（超过 600KB），请尝试上传更小的图片或更低分辨率的图片。', 'error');
         setUploading(false);
         return;
       }
@@ -161,17 +173,30 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
   };
 
   const handleLike = async (imageId: string) => {
+    if (likedImages.has(imageId)) {
+      showToast('你已经点过赞啦！', 'error');
+      return;
+    }
+
     try {
       const response = await fetch(`/api/images/${imageId}/like`, {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: mockUid })
       });
       if (response.ok) {
         setImages(prev => prev.map(img => 
           img.id === imageId ? { ...img, likes: (img.likes || 0) + 1 } : img
         ));
+        setLikedImages(prev => new Set(prev).add(imageId));
+        showToast('点赞成功！', 'success');
+      } else {
+        const data = await response.json();
+        showToast(data.error || '点赞失败', 'error');
       }
     } catch (error) {
       console.error('Error liking image:', error);
+      showToast('点赞失败', 'error');
     }
   };
 
@@ -216,10 +241,19 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
               />
               <button 
                 onClick={() => handleLike(img.id)}
-                className="absolute bottom-2 right-2 bg-white border-2 border-black p-1.5 hover:bg-red-500 hover:text-white transition-all flex items-center gap-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none z-10"
+                className={`absolute bottom-2 right-2 border-2 border-black p-1.5 transition-all flex items-center gap-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none z-10 ${
+                  likedImages.has(img.id) ? 'bg-red-500 text-white' : 'bg-white hover:bg-red-500 hover:text-white'
+                }`}
               >
-                <Heart size={12} className={img.likes > 0 ? 'fill-current' : ''} />
+                <Heart size={12} className={img.likes > 0 || likedImages.has(img.id) ? 'fill-current' : ''} />
                 <span className="font-black text-[10px]">{img.likes || 0}</span>
+              </button>
+              <button 
+                onClick={() => setExpandedImageId(expandedImageId === img.id ? null : img.id)}
+                className="absolute bottom-2 left-2 bg-white border-2 border-black p-1.5 hover:bg-yellow-400 transition-all flex items-center gap-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none z-10"
+              >
+                <MessageSquare size={12} />
+                <span className="font-black text-[10px] uppercase">{expandedImageId === img.id ? '收起' : '评论'}</span>
               </button>
               {isAdmin && (
                 <button 
@@ -244,6 +278,19 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
                 </span>
               </div>
               {img.caption && <p className="text-[10px] font-medium leading-tight line-clamp-2">{img.caption}</p>}
+              
+              <AnimatePresence>
+                {expandedImageId === img.id && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <CommentSection type="images" id={img.id} nickname={nickname} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </motion.article>
         ))}
