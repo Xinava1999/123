@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, limit } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, limit, deleteDoc, doc } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
 import { db, auth } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, X, Copy, Check, Search, MessageSquare, Loader2 } from 'lucide-react';
+import { Plus, X, Copy, Check, Search, MessageSquare, Loader2, Trash2 } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 
 interface Deck {
@@ -79,6 +79,18 @@ export const DeckSharing: React.FC<{ nickname: string }> = ({ nickname }) => {
     deck.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const isAdmin = auth.currentUser?.email === 'xinava1999@gmail.com';
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('确定要删除这个卡组吗？')) return;
+    try {
+      await deleteDoc(doc(db, 'decks', id));
+    } catch (error) {
+      console.error('Error deleting deck:', error);
+      handleFirestoreError(error, OperationType.DELETE, `decks/${id}`);
+    }
+  };
+
   return (
     <div className="space-y-6 pb-24">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -111,9 +123,19 @@ export const DeckSharing: React.FC<{ nickname: string }> = ({ nickname }) => {
           >
             <div className="flex justify-between items-start mb-4">
               <h3 className="text-xl font-black italic tracking-tighter">{deck.title}</h3>
-              <span className="text-[10px] font-bold bg-yellow-400 px-2 py-1 border border-black">
-                {deck.authorName || '匿名炉友'}
-              </span>
+              <div className="flex items-center space-x-2">
+                {isAdmin && (
+                  <button 
+                    onClick={() => handleDelete(deck.id)}
+                    className="p-1 text-red-500 hover:bg-red-50 transition-colors rounded"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
+                <span className="text-[10px] font-bold bg-yellow-400 px-2 py-1 border border-black">
+                  {deck.authorName || '匿名炉友'}
+                </span>
+              </div>
             </div>
 
             <div className="mt-auto flex items-center space-x-2">

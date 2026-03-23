@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, Timestamp, updateDoc, doc, increment } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, Timestamp, updateDoc, doc, increment, deleteDoc } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { signInAnonymously } from 'firebase/auth';
 import { db, storage, auth } from '../firebase';
-import { Camera, Loader2, Heart, Plus, X, Image as ImageIcon, AlertCircle } from 'lucide-react';
+import { Camera, Loader2, Heart, Plus, X, ImageIcon, AlertCircle, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
@@ -152,6 +152,18 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
     }
   };
 
+  const isAdmin = auth.currentUser?.email === 'xinava1999@gmail.com';
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('确定要删除这张图片吗？')) return;
+    try {
+      await deleteDoc(doc(db, 'images', id));
+    } catch (error) {
+      console.error('Error deleting image:', error);
+      handleFirestoreError(error, OperationType.DELETE, `images/${id}`);
+    }
+  };
+
   return (
     <div className="pb-32">
       {/* Gallery Grid */}
@@ -177,6 +189,14 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
                 <Heart size={12} className={img.likes > 0 ? 'fill-current' : ''} />
                 <span className="font-black text-[10px]">{img.likes || 0}</span>
               </button>
+              {isAdmin && (
+                <button 
+                  onClick={() => handleDelete(img.id)}
+                  className="absolute top-2 right-2 bg-white border-2 border-black p-1.5 hover:bg-red-500 hover:text-white transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none z-10"
+                >
+                  <Trash2 size={12} />
+                </button>
+              )}
             </div>
             <div className="p-2 space-y-1">
               <div className="flex justify-between items-center">

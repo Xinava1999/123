@@ -124,9 +124,6 @@ export const QBFeeding: React.FC = () => {
                 initial={{ width: 0 }}
                 animate={{ width: `${hunger}%` }}
               />
-              <div className="absolute inset-0 flex items-center justify-center text-[10px] font-black mix-blend-difference text-white">
-                {hunger >= 100 ? 'FULL' : `${Math.round(Math.max(0.05, (1 - hunger/100)) * 100)}% 成功率`}
-              </div>
             </div>
           </div>
 

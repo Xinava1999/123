@@ -6,6 +6,11 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isAuthenticated() && 
+             (request.auth.token.email == "xinava1999@gmail.com" && request.auth.token.email_verified == true);
+    }
+
     function isValidImage(data) {
       return data.url is string && data.url.size() > 0 &&
              data.caption is string && data.caption.size() <= 1000 &&
@@ -28,14 +33,15 @@ service cloud.firestore {
       allow update: if isAuthenticated() && 
                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']) &&
                     request.resource.data.likes == resource.data.likes + 1;
-      allow delete: if false;
+      allow delete: if isAdmin();
     }
 
     // Decks collection
     match /decks/{deckId} {
       allow read: if true;
       allow create: if isAuthenticated() && isValidDeck(request.resource.data);
-      allow update, delete: if false;
+      allow delete: if isAdmin();
+      allow update: if false;
     }
 
     // Test writes collection

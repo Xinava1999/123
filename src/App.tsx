@@ -10,10 +10,13 @@ import { Image, LayoutGrid, Gamepad2, Utensils, User } from 'lucide-react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
 
+import { HearthstoneQuiz } from './components/HearthstoneQuiz';
+
 function AppContent() {
   const [activeTab, setActiveTab] = useState<'decks' | 'gallery' | 'game' | 'feed'>('decks');
+  const [activeGame, setActiveGame] = useState<'breakout' | 'quiz'>('breakout');
   const [nickname, setNickname] = useState('');
-  const { user } = useAuth();
+  const { user, googleLogin, logout } = useAuth();
 
   useEffect(() => {
     const saved = localStorage.getItem('user_nickname');
@@ -69,7 +72,28 @@ function AppContent() {
           )}
 
           {activeTab === 'game' && (
-            <QBGameMini />
+            <div className="space-y-6">
+              <div className="flex justify-center space-x-4 mb-8">
+                <button
+                  onClick={() => setActiveGame('breakout')}
+                  className={`px-6 py-2 font-black italic border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all ${
+                    activeGame === 'breakout' ? 'bg-yellow-400' : 'bg-white hover:bg-gray-100'
+                  }`}
+                >
+                  弹射蟑螂
+                </button>
+                <button
+                  onClick={() => setActiveGame('quiz')}
+                  className={`px-6 py-2 font-black italic border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all ${
+                    activeGame === 'quiz' ? 'bg-yellow-400' : 'bg-white hover:bg-gray-100'
+                  }`}
+                >
+                  炉石问答
+                </button>
+              </div>
+              {activeGame === 'breakout' && <QBGameMini />}
+              {activeGame === 'quiz' && <HearthstoneQuiz />}
+            </div>
           )}
 
           {activeTab === 'feed' && (
@@ -77,7 +101,7 @@ function AppContent() {
           )}
         </div>
 
-        {/* Nickname Input */}
+        {/* Nickname Input & Auth */}
         <div className="bg-white border-4 border-black p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-4">
           <div className="flex items-center space-x-2 font-black italic text-xl">
             <User size={24} />
@@ -90,6 +114,27 @@ function AppContent() {
             placeholder="输入你的大名..."
             className="flex-1 w-full bg-gray-100 border-2 border-black px-4 py-2 font-bold focus:bg-yellow-400 focus:outline-none transition-colors"
           />
+          <div className="flex items-center space-x-2">
+            {user && !user.isAnonymous ? (
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-bold opacity-50 truncate max-w-[100px]">{user.email}</span>
+                <button
+                  onClick={() => logout()}
+                  className="bg-red-500 text-white px-4 py-2 font-black text-xs border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
+                >
+                  退出
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => googleLogin()}
+                className="bg-white text-black px-4 py-2 font-black text-xs border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all flex items-center space-x-2"
+              >
+                <User size={14} />
+                <span>管理员登录</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </Layout>
