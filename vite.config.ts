@@ -1,14 +1,13 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
-import { fileURLToPath } from 'url';
+import path from 'path';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-export default defineConfig(({mode}) => {
-  const env = loadEnv(mode, '.', '');
+export default defineConfig(({ mode }) => {
+  // 使用 path.resolve('.') 替代 process.cwd() 以获得更稳定的绝对路径
+  const root = path.resolve('.');
+  const env = loadEnv(mode, root, '');
+  
   return {
     plugins: [react(), tailwindcss()],
     define: {
@@ -16,13 +15,16 @@ export default defineConfig(({mode}) => {
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(root, 'src'),
       },
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
     },
+    build: {
+      outDir: 'dist',
+      emptyOutDir: true,
+    }
   };
 });

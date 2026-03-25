@@ -3,15 +3,14 @@ import { FirebaseProvider, useAuth } from './components/FirebaseProvider';
 import { Layout } from './components/Layout';
 import { Gallery } from './components/Gallery';
 import { DeckSharing } from './components/DeckSharing';
-import { QBGameMini } from './components/QBGameMini';
+import { DailyVote } from './components/DailyVote';
 import { QBFeeding } from './components/QBFeeding';
-import { Image, LayoutGrid, Gamepad2, Utensils, User } from 'lucide-react';
+import { Image, LayoutGrid, Vote, Utensils, User, Gamepad2 } from 'lucide-react';
 
 import { HearthstoneQuiz } from './components/HearthstoneQuiz';
 
 function AppContent() {
-  const [activeTab, setActiveTab] = useState<'decks' | 'gallery' | 'game' | 'feed'>('decks');
-  const [activeGame, setActiveGame] = useState<'breakout' | 'quiz'>('breakout');
+  const [activeTab, setActiveTab] = useState<'decks' | 'gallery' | 'vote' | 'quiz' | 'feed'>('decks');
   const [nickname, setNickname] = useState('');
   const [adminToken, setAdminToken] = useState(localStorage.getItem('admin_token') || '');
 
@@ -44,7 +43,8 @@ function AppContent() {
   const tabs = [
     { id: 'decks', label: '卡组分享', icon: <LayoutGrid size={20} /> },
     { id: 'gallery', label: '每日大赛', icon: <Image size={20} /> },
-    { id: 'game', label: '小游戏', icon: <Gamepad2 size={20} /> },
+    { id: 'vote', label: '每日投票', icon: <Vote size={20} /> },
+    { id: 'quiz', label: '炉石问答', icon: <Gamepad2 size={20} /> },
     { id: 'feed', label: '投喂', icon: <Utensils size={20} /> },
   ];
 
@@ -79,29 +79,12 @@ function AppContent() {
             <Gallery nickname={nickname} />
           )}
 
-          {activeTab === 'game' && (
-            <div className="space-y-6">
-              <div className="flex justify-center space-x-4 mb-8">
-                <button
-                  onClick={() => setActiveGame('breakout')}
-                  className={`px-6 py-2 font-black italic border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all ${
-                    activeGame === 'breakout' ? 'bg-yellow-400' : 'bg-white hover:bg-gray-100'
-                  }`}
-                >
-                  弹射蟑螂
-                </button>
-                <button
-                  onClick={() => setActiveGame('quiz')}
-                  className={`px-6 py-2 font-black italic border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all ${
-                    activeGame === 'quiz' ? 'bg-yellow-400' : 'bg-white hover:bg-gray-100'
-                  }`}
-                >
-                  炉石问答
-                </button>
-              </div>
-              {activeGame === 'breakout' && <QBGameMini />}
-              {activeGame === 'quiz' && <HearthstoneQuiz />}
-            </div>
+          {activeTab === 'vote' && (
+            <DailyVote nickname={nickname} />
+          )}
+
+          {activeTab === 'quiz' && (
+            <HearthstoneQuiz />
           )}
 
           {activeTab === 'feed' && (

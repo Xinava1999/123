@@ -27,7 +27,12 @@ export const CommentSection: React.FC<CommentSectionProps> = ({ type, id, nickna
       const response = await fetch(`/api/${type}/${id}/comments`);
       if (response.ok) {
         const data = await response.json();
-        setComments(data);
+        if (Array.isArray(data)) {
+          setComments(data);
+        } else {
+          console.error('Comments data is not an array:', data);
+          setComments([]);
+        }
       }
     } catch (error) {
       console.error('Error fetching comments:', error);

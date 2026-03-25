@@ -25,7 +25,14 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { showToast, ToastComponent } = useToast();
 
-  const mockUid = localStorage.getItem('mock_uid') || 'anonymous';
+  const [mockUid] = useState(() => {
+    let id = localStorage.getItem('mock_uid');
+    if (!id) {
+      id = Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('mock_uid', id);
+    }
+    return id;
+  });
 
   useEffect(() => {
     const fetchImages = async () => {
@@ -36,8 +43,13 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
           const contentType = response.headers.get('content-type');
           if (contentType && contentType.includes('application/json')) {
             const data = await response.json();
-            console.log(`Fetched ${data.length} images`);
-            setImages(data);
+            if (Array.isArray(data)) {
+              console.log(`Fetched ${data.length} images`);
+              setImages(data);
+            } else {
+              console.error('Images data is not an array:', data);
+              setImages([]);
+            }
           } else {
             const text = await response.text();
             console.error('Expected JSON but got:', text.substring(0, 100));
@@ -157,7 +169,9 @@ export const Gallery: React.FC<{ nickname: string }> = ({ nickname }) => {
           const res = await fetch('/api/images');
           if (res.ok) {
             const data = await res.json();
-            setImages(data);
+            if (Array.isArray(data)) {
+              setImages(data);
+            }
           }
         }, 500);
       } else {

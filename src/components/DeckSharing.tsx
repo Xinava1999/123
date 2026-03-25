@@ -31,8 +31,13 @@ export const DeckSharing: React.FC<{ nickname: string }> = ({ nickname }) => {
           const contentType = response.headers.get('content-type');
           if (contentType && contentType.includes('application/json')) {
             const data = await response.json();
-            console.log(`Fetched ${data.length} decks`);
-            setDecks(data);
+            if (Array.isArray(data)) {
+              console.log(`Fetched ${data.length} decks`);
+              setDecks(data);
+            } else {
+              console.error('Data is not an array:', data);
+              setDecks([]);
+            }
           } else {
             const text = await response.text();
             console.error('Expected JSON but got:', text.substring(0, 100));
@@ -85,7 +90,9 @@ export const DeckSharing: React.FC<{ nickname: string }> = ({ nickname }) => {
           const res = await fetch('/api/decks');
           if (res.ok) {
             const data = await res.json();
-            setDecks(data);
+            if (Array.isArray(data)) {
+              setDecks(data);
+            }
           }
         }, 500);
       } else {
