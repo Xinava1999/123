@@ -3,38 +3,11 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Trophy, RotateCcw, HelpCircle, CheckCircle2, XCircle } from 'lucide-react';
 
 interface Question {
+  id: string;
   question: string;
   options: string[];
   correctAnswer: number;
 }
-
-const QUESTIONS: Question[] = [
-  {
-    question: "“希尔瓦娜斯·风行者”在被移入荣誉室之前的最后一次平衡调整中，法力消耗从5点增加到了多少点？",
-    options: ["5", "6", "7", "8"],
-    correctAnswer: 1
-  },
-  {
-    question: "哪张卡牌是炉石传说历史上第一张拥有“吸血”机制的随从（尽管当时该关键字尚未正式命名）？",
-    options: ["燃鬃·自走炮", "痛苦女王", "吸血鬼药剂师", "自爆绵羊"],
-    correctAnswer: 1
-  },
-  {
-    question: "在炉石传说的底层机制中，双方场上随从数量的总和上限是多少？",
-    options: ["7", "10", "14", "15"],
-    correctAnswer: 2
-  },
-  {
-    question: "哪张卡牌的卡牌背景描述是：“他总是觉得自己是个大人物”？",
-    options: ["微型战斗机甲", "马格曼达", "格鲁尔", "砰砰博士"],
-    correctAnswer: 0
-  },
-  {
-    question: "随从“米尔豪斯·法力风暴”在内测（Alpha/Beta）时期的战吼效果是什么？",
-    options: ["下回合对手法术消耗为0", "将一张“末日降临”加入你的手牌", "随机施放三个法术", "消灭所有法力消耗为1的随从"],
-    correctAnswer: 1
-  }
-];
 
 export const HearthstoneQuiz: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -45,14 +18,19 @@ export const HearthstoneQuiz: React.FC = () => {
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [seenQuestionIds, setSeenQuestionIds] = useState<string[]>([]);
 
-  const fetchQuestions = async () => {
+  const fetchQuestions = async (resetSeen = false) => {
     setLoading(true);
     try {
-      const res = await fetch('/api/quiz/questions');
+      const currentSeen = resetSeen ? [] : seenQuestionIds;
+      const res = await fetch(`/api/quiz/questions?exclude=${currentSeen.join(',')}`);
       const data = await res.json();
       if (Array.isArray(data)) {
         setQuestions(data);
+        // Add new IDs to seen list
+        const newIds = data.map((q: any) => q.id);
+        setSeenQuestionIds(prev => [...prev, ...newIds]);
       } else {
         console.error('Questions data is not an array:', data);
         setQuestions([]);
@@ -80,7 +58,12 @@ export const HearthstoneQuiz: React.FC = () => {
   };
 
   const startQuiz = async () => {
-    await fetchQuestions();
+    // If we've seen a lot of questions, maybe reset or just keep going
+    // For now, let's reset if we've seen more than 100 to avoid empty results
+    const shouldReset = seenQuestionIds.length > 150;
+    if (shouldReset) setSeenQuestionIds([]);
+    
+    await fetchQuestions(shouldReset);
     setCurrentQuestion(0);
     setScore(0);
     setGameState('playing');

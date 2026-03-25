@@ -207,7 +207,7 @@ export const DailyVote: React.FC<{ nickname: string }> = ({ nickname }) => {
                     type="text"
                     value={newVoteTitle}
                     onChange={(e) => setNewVoteTitle(e.target.value)}
-                    placeholder="例如：你最喜欢的卡背是哪个？"
+                    placeholder="例如：一包五异画是不是BUG？"
                     className="w-full p-3 border-2 border-black focus:bg-yellow-50 font-bold"
                   />
                 </div>
