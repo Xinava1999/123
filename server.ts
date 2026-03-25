@@ -2,28 +2,60 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
-import { initializeApp, getApps } from "firebase/app";
-import { 
-  getFirestore, 
-  collection, 
-  addDoc, 
-  getDocs, 
-  doc, 
-  getDoc,
-  deleteDoc, 
-  updateDoc, 
-  increment, 
-  serverTimestamp, 
-  limit, 
-  query,
-  setDoc
-} from "firebase/firestore";
+import admin from "firebase-admin";
 import fs from "fs";
+import Database from "better-sqlite3";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Initialize Firebase Client SDK (on server)
+// --- Database Selection ---
+// Default to SQLite if explicitly requested, or if no Firebase config exists
+const hasFirebaseConfig = fs.existsSync(configPath);
+const USE_SQLITE = process.env.USE_SQLITE === "true" || !hasFirebaseConfig;
+let db: any;
+let sqliteDb: any;
+
+// Initialize SQLite if requested
+if (USE_SQLITE) {
+  console.log("Initializing SQLite database...");
+  sqliteDb = new Database("database.sqlite");
+  
+  // Create tables if they don't exist
+  sqliteDb.exec(`
+    CREATE TABLE IF NOT EXISTS images (
+      id TEXT PRIMARY KEY,
+      url TEXT NOT NULL,
+      authorName TEXT,
+      caption TEXT,
+      likes INTEGER DEFAULT 0,
+      createdAt TEXT
+    );
+    CREATE TABLE IF NOT EXISTS decks (
+      id TEXT PRIMARY KEY,
+      code TEXT NOT NULL,
+      title TEXT NOT NULL,
+      authorName TEXT,
+      createdAt TEXT
+    );
+    CREATE TABLE IF NOT EXISTS comments (
+      id TEXT PRIMARY KEY,
+      parentId TEXT NOT NULL,
+      parentType TEXT NOT NULL,
+      text TEXT NOT NULL,
+      authorName TEXT,
+      createdAt TEXT
+    );
+    CREATE TABLE IF NOT EXISTS likes_tracking (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL,
+      imageId TEXT NOT NULL,
+      createdAt TEXT
+    );
+  `);
+}
+
+// Initialize Firebase Admin SDK (on server)
 const configPath = path.join(process.cwd(), "firebase-applet-config.json");
 let firebaseConfig: any = null;
 if (fs.existsSync(configPath)) {
@@ -34,46 +66,57 @@ if (fs.existsSync(configPath)) {
   }
 }
 
-// Standard initialization for Cloud Run environment
-let firebaseApp: any = null;
-try {
-  if (getApps().length === 0 && firebaseConfig) {
-    firebaseApp = initializeApp(firebaseConfig);
-    console.log("Firebase Client SDK initialized with projectId:", firebaseConfig.projectId);
-  } else if (getApps().length > 0) {
-    firebaseApp = getApps()[0];
+if (!USE_SQLITE && firebaseConfig) {
+  try {
+    if (admin.apps.length === 0) {
+      // In GCP/Cloud Run, applicationDefault() is preferred.
+      // If that fails, we use the projectId from our config.
+      admin.initializeApp({
+        projectId: firebaseConfig.projectId,
+      });
+      console.log("Firebase Admin SDK initialized with projectId:", firebaseConfig.projectId);
+    }
+    
+    // Use the specific database ID if provided in config
+    if (firebaseConfig.firestoreDatabaseId) {
+      db = admin.firestore(firebaseConfig.firestoreDatabaseId);
+      console.log("Firestore initialized with databaseId:", firebaseConfig.firestoreDatabaseId);
+    } else {
+      db = admin.firestore();
+      console.log("Firestore initialized with default database");
+    }
+  } catch (e: any) {
+    console.error("Firebase Admin initialization error:", e);
+    // Fallback to SQLite if Firebase fails (useful for local dev or if GCP auth fails)
+    if (!USE_SQLITE) {
+      console.log("Falling back to SQLite due to Firebase error...");
+      // Initialize SQLite if it wasn't already
+      if (!sqliteDb) {
+        sqliteDb = new Database("database.sqlite");
+        // ... (tables creation logic is already above, but we'll ensure it's called)
+      }
+    }
   }
-} catch (e: any) {
-  console.error("Firebase initialization error:", e);
 }
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
-
-  // Initialize DB
-  let db: any;
-  try {
-    if (firebaseApp && firebaseConfig?.firestoreDatabaseId) {
-      db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
-      console.log("Firestore initialized with databaseId:", firebaseConfig.firestoreDatabaseId);
-    } else {
-      db = getFirestore();
-      console.log("Firestore initialized with default database");
-    }
-  } catch (e) {
-    console.error("Firestore initialization failed:", e);
-    db = getFirestore();
-  }
+  const PORT = process.env.PORT || 3000;
 
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
+  // --- API Routes ---
+
   // Health check
   app.get("/api/health", async (req, res) => {
     try {
-      await setDoc(doc(db, "health", "check"), { lastCheck: serverTimestamp() });
-      res.json({ status: "ok", database: "connected" });
+      if (USE_SQLITE || !db) {
+        res.json({ status: "ok", database: "sqlite" });
+      } else {
+        await db.collection("health").doc("check").set({ lastCheck: admin.firestore.FieldValue.serverTimestamp() });
+        res.json({ status: "ok", database: "firestore" });
+      }
     } catch (error: any) {
       console.error("Health check failed:", error);
       res.status(500).json({ status: "error", message: error.message });
@@ -91,56 +134,48 @@ async function startServer() {
 
     try {
       const { imageUrl, authorName, caption } = req.body;
+      if (!imageUrl) return res.status(400).json({ error: "imageUrl is required" });
 
-      if (!imageUrl) {
-        return res.status(400).json({ error: "imageUrl is required" });
-      }
-
-      // Save to Firestore
-      const docRef = await addDoc(collection(db, "images"), {
+      const id = Math.random().toString(36).substring(2, 15);
+      const data = {
         url: imageUrl,
         authorName: authorName || "QQ群友",
         caption: caption || "来自QQ群自动同步",
         likes: 0,
-        createdAt: serverTimestamp(),
-      });
+        createdAt: new Date().toISOString(),
+      };
 
-      console.log("Image synced from QQ:", docRef.id);
-      res.json({ success: true, id: docRef.id });
+      if (USE_SQLITE || !db) {
+        sqliteDb.prepare("INSERT INTO images (id, url, authorName, caption, likes, createdAt) VALUES (?, ?, ?, ?, ?, ?)")
+          .run(id, data.url, data.authorName, data.caption, data.likes, data.createdAt);
+      } else {
+        await db.collection("images").doc(id).set({
+          ...data,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+
+      res.json({ success: true, id });
     } catch (error) {
       console.error("Webhook error:", error);
       res.status(500).json({ error: "Internal Server Error" });
     }
   });
 
-  // --- Proxy API Endpoints for Decks ---
-  app.get(["/api/decks", "/api/decks/"], async (req, res) => {
-    console.log("GET /api/decks requested");
+  // --- Decks API ---
+  app.get("/api/decks", async (req, res) => {
     try {
-      const q = query(collection(db, "decks"), limit(50));
-      const snapshot = await getDocs(q);
-      console.log(`Found ${snapshot.docs.length} decks`);
-      
-      const decks = snapshot.docs.map(doc => {
-        const data = doc.data();
-        let createdAt = new Date();
-        if (data.createdAt) {
-          if (typeof data.createdAt.toDate === 'function') {
-            createdAt = data.createdAt.toDate();
-          } else if (data.createdAt._seconds) {
-            createdAt = new Date(data.createdAt._seconds * 1000);
-          } else {
-            createdAt = new Date(data.createdAt);
-          }
-        }
-        return {
+      let decks: any[] = [];
+      if (USE_SQLITE || !db) {
+        decks = sqliteDb.prepare("SELECT * FROM decks ORDER BY createdAt DESC LIMIT 50").all();
+      } else {
+        const snapshot = await db.collection("decks").orderBy("createdAt", "desc").limit(50).get();
+        decks = snapshot.docs.map((doc: any) => ({
           id: doc.id,
-          ...data,
-          createdAt: createdAt.toISOString()
-        };
-      });
-
-      decks.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          ...doc.data(),
+          createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || doc.data().createdAt
+        }));
+      }
       res.json(decks);
     } catch (error: any) {
       console.error("Error fetching decks:", error);
@@ -148,39 +183,45 @@ async function startServer() {
     }
   });
 
-  app.post(["/api/decks", "/api/decks/"], async (req, res) => {
-    console.log("POST /api/decks requested", { bodyKeys: Object.keys(req.body) });
+  app.post("/api/decks", async (req, res) => {
     try {
-      if (!db) throw new Error("Database not initialized");
       const { code, title, authorName } = req.body;
       if (!code || !title) return res.status(400).json({ error: "Missing fields" });
       
-      const docRef = await addDoc(collection(db, "decks"), {
+      const id = Math.random().toString(36).substring(2, 15);
+      const data = {
         code,
         title,
         authorName: authorName || "匿名炉友",
-        createdAt: serverTimestamp(),
-      });
-      console.log("Deck added with ID:", docRef.id);
-      res.json({ id: docRef.id });
+        createdAt: new Date().toISOString()
+      };
+
+      if (USE_SQLITE || !db) {
+        sqliteDb.prepare("INSERT INTO decks (id, code, title, authorName, createdAt) VALUES (?, ?, ?, ?, ?)")
+          .run(id, data.code, data.title, data.authorName, data.createdAt);
+      } else {
+        await db.collection("decks").doc(id).set({
+          ...data,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+      res.json({ id });
     } catch (error: any) {
       console.error("Error adding deck:", error);
-      res.status(500).json({ 
-        error: "Failed to add deck", 
-        details: error.message,
-        code: error.code,
-        stack: error.stack 
-      });
+      res.status(500).json({ error: "Failed to add deck", details: error.message });
     }
   });
 
   app.delete("/api/decks/:id", async (req, res) => {
-    console.log(`DELETE /api/decks/${req.params.id} requested`);
     const adminToken = req.headers["x-admin-token"];
     if (adminToken !== process.env.ADMIN_TOKEN) return res.status(401).json({ error: "Unauthorized" });
 
     try {
-      await deleteDoc(doc(db, "decks", req.params.id));
+      if (USE_SQLITE || !db) {
+        sqliteDb.prepare("DELETE FROM decks WHERE id = ?").run(req.params.id);
+      } else {
+        await db.collection("decks").doc(req.params.id).delete();
+      }
       res.json({ success: true });
     } catch (error: any) {
       console.error("Error deleting deck:", error);
@@ -188,34 +229,20 @@ async function startServer() {
     }
   });
 
-  // --- Proxy API Endpoints for Images ---
-  app.get(["/api/images", "/api/images/"], async (req, res) => {
-    console.log("GET /api/images requested");
+  // --- Images API ---
+  app.get("/api/images", async (req, res) => {
     try {
-      const q = query(collection(db, "images"), limit(50));
-      const snapshot = await getDocs(q);
-      console.log(`Found ${snapshot.docs.length} images`);
-      
-      const images = snapshot.docs.map(doc => {
-        const data = doc.data();
-        let createdAt = new Date();
-        if (data.createdAt) {
-          if (typeof data.createdAt.toDate === 'function') {
-            createdAt = data.createdAt.toDate();
-          } else if (data.createdAt._seconds) {
-            createdAt = new Date(data.createdAt._seconds * 1000);
-          } else {
-            createdAt = new Date(data.createdAt);
-          }
-        }
-        return {
+      let images: any[] = [];
+      if (USE_SQLITE || !db) {
+        images = sqliteDb.prepare("SELECT * FROM images ORDER BY createdAt DESC LIMIT 50").all();
+      } else {
+        const snapshot = await db.collection("images").orderBy("createdAt", "desc").limit(50).get();
+        images = snapshot.docs.map((doc: any) => ({
           id: doc.id,
-          ...data,
-          createdAt: createdAt.toISOString()
-        };
-      });
-
-      images.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          ...doc.data(),
+          createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || doc.data().createdAt
+        }));
+      }
       res.json(images);
     } catch (error: any) {
       console.error("Error fetching images:", error);
@@ -223,35 +250,33 @@ async function startServer() {
     }
   });
 
-  app.post(["/api/images", "/api/images/"], async (req, res) => {
-    const bodySize = JSON.stringify(req.body).length;
-    console.log("POST /api/images requested", { 
-      caption: req.body.caption, 
-      authorName: req.body.authorName,
-      bodySize: `${(bodySize / 1024).toFixed(2)} KB`
-    });
+  app.post("/api/images", async (req, res) => {
     try {
-      if (!db) throw new Error("Database not initialized");
       const { url, caption, authorName } = req.body;
       if (!url || !caption) return res.status(400).json({ error: "Missing fields" });
 
-      const docRef = await addDoc(collection(db, "images"), {
+      const id = Math.random().toString(36).substring(2, 15);
+      const data = {
         url,
         caption,
         authorName: authorName || "匿名炉友",
         likes: 0,
-        createdAt: serverTimestamp(),
-      });
-      console.log("Image added with ID:", docRef.id);
-      res.json({ id: docRef.id });
+        createdAt: new Date().toISOString()
+      };
+
+      if (USE_SQLITE || !db) {
+        sqliteDb.prepare("INSERT INTO images (id, url, caption, authorName, likes, createdAt) VALUES (?, ?, ?, ?, ?, ?)")
+          .run(id, data.url, data.caption, data.authorName, data.likes, data.createdAt);
+      } else {
+        await db.collection("images").doc(id).set({
+          ...data,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+      res.json({ id });
     } catch (error: any) {
       console.error("Error adding image:", error);
-      res.status(500).json({ 
-        error: "Failed to add image", 
-        details: error.message,
-        code: error.code,
-        stack: error.stack
-      });
+      res.status(500).json({ error: "Failed to add image", details: error.message });
     }
   });
 
@@ -261,25 +286,28 @@ async function startServer() {
 
     try {
       const likeId = `${req.params.id}_${userId}`;
-      const likeRef = doc(db, "likes_tracking", likeId);
-      const likeDocSnap = await getDoc(likeRef);
+      
+      if (USE_SQLITE || !db) {
+        const existing = sqliteDb.prepare("SELECT id FROM likes_tracking WHERE id = ?").get(likeId);
+        if (existing) return res.status(400).json({ error: "Already liked" });
 
-      if (likeDocSnap.exists()) {
-        return res.status(400).json({ error: "Already liked" });
+        sqliteDb.prepare("UPDATE images SET likes = likes + 1 WHERE id = ?").run(req.params.id);
+        sqliteDb.prepare("INSERT INTO likes_tracking (id, userId, imageId, createdAt) VALUES (?, ?, ?, ?)")
+          .run(likeId, userId, req.params.id, new Date().toISOString());
+      } else {
+        const likeRef = db.collection("likes_tracking").doc(likeId);
+        const likeDocSnap = await likeRef.get();
+        if (likeDocSnap.exists) return res.status(400).json({ error: "Already liked" });
+
+        await db.collection("images").doc(req.params.id).update({
+          likes: admin.firestore.FieldValue.increment(1)
+        });
+        await likeRef.set({
+          userId,
+          imageId: req.params.id,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
       }
-
-      const docRef = doc(db, "images", req.params.id);
-      await updateDoc(docRef, {
-        likes: increment(1)
-      });
-
-      // Track the like
-      await setDoc(likeRef, {
-        userId,
-        imageId: req.params.id,
-        createdAt: serverTimestamp()
-      });
-
       res.json({ success: true });
     } catch (error: any) {
       console.error("Error liking image:", error);
@@ -287,34 +315,24 @@ async function startServer() {
     }
   });
 
-  // --- Comment Endpoints ---
+  // --- Comments API ---
   app.get("/api/:type/:id/comments", async (req, res) => {
     const { type, id } = req.params;
     if (!["decks", "images"].includes(type)) return res.status(400).json({ error: "Invalid type" });
 
     try {
-      const q = query(collection(db, type, id, "comments"), limit(100));
-      const snapshot = await getDocs(q);
-      const comments = snapshot.docs.map(doc => {
-        const data = doc.data();
-        let createdAt = new Date();
-        if (data.createdAt) {
-          if (typeof data.createdAt.toDate === 'function') {
-            createdAt = data.createdAt.toDate();
-          } else if (data.createdAt._seconds) {
-            createdAt = new Date(data.createdAt._seconds * 1000);
-          } else {
-            createdAt = new Date(data.createdAt);
-          }
-        }
-        return {
+      let comments: any[] = [];
+      if (USE_SQLITE || !db) {
+        comments = sqliteDb.prepare("SELECT * FROM comments WHERE parentId = ? AND parentType = ? ORDER BY createdAt ASC")
+          .all(id, type);
+      } else {
+        const snapshot = await db.collection(type).doc(id).collection("comments").orderBy("createdAt", "asc").get();
+        comments = snapshot.docs.map((doc: any) => ({
           id: doc.id,
-          ...data,
-          createdAt: createdAt.toISOString()
-        };
-      });
-
-      comments.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()); // Oldest first for comments
+          ...doc.data(),
+          createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || doc.data().createdAt
+        }));
+      }
       res.json(comments);
     } catch (error: any) {
       console.error("Error fetching comments:", error);
@@ -329,12 +347,23 @@ async function startServer() {
     if (!text) return res.status(400).json({ error: "Text is required" });
 
     try {
-      const docRef = await addDoc(collection(db, type, id, "comments"), {
+      const commentId = Math.random().toString(36).substring(2, 15);
+      const data = {
         text,
         authorName: authorName || "匿名炉友",
-        createdAt: serverTimestamp(),
-      });
-      res.json({ id: docRef.id });
+        createdAt: new Date().toISOString()
+      };
+
+      if (USE_SQLITE || !db) {
+        sqliteDb.prepare("INSERT INTO comments (id, parentId, parentType, text, authorName, createdAt) VALUES (?, ?, ?, ?, ?, ?)")
+          .run(commentId, id, type, data.text, data.authorName, data.createdAt);
+      } else {
+        await db.collection(type).doc(id).collection("comments").doc(commentId).set({
+          ...data,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+      res.json({ id: commentId });
     } catch (error: any) {
       console.error("Error adding comment:", error);
       res.status(500).json({ error: "Failed to add comment", details: error.message });
@@ -346,7 +375,11 @@ async function startServer() {
     if (adminToken !== process.env.ADMIN_TOKEN) return res.status(401).json({ error: "Unauthorized" });
 
     try {
-      await deleteDoc(doc(db, "images", req.params.id));
+      if (USE_SQLITE || !db) {
+        sqliteDb.prepare("DELETE FROM images WHERE id = ?").run(req.params.id);
+      } else {
+        await db.collection("images").doc(req.params.id).delete();
+      }
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting image:", error);
@@ -375,3 +408,4 @@ async function startServer() {
 }
 
 startServer();
+
